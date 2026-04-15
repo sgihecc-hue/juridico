@@ -37,6 +37,21 @@ app.use(cors());
 app.use(express.json());
 app.use('/uploads', express.static(join(__dirname, 'uploads')));
 
+// Lazy database initialization (runs once)
+let dbInitialized = false;
+app.use(async (req, res, next) => {
+  if (!dbInitialized) {
+    try {
+      await initDatabase();
+      dbInitialized = true;
+    } catch (err) {
+      console.error('Falha ao inicializar banco:', err);
+      return res.status(500).json({ error: 'Erro ao conectar ao banco de dados' });
+    }
+  }
+  next();
+});
+
 app.use('/api/auth', authRoutes);
 app.use('/api/usuarios', usuariosRoutes);
 app.use('/api/clientes', clientesRoutes);
@@ -73,18 +88,16 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: 'Erro interno do servidor' });
 });
 
-// Cron jobs
-import { startCronJobs } from './cron.js';
+// Export app for serverless (Vercel)
+export default app;
 
-async function start() {
-  await initDatabase();
-  app.listen(PORT, () => {
-    console.log(`Servidor rodando em http://localhost:${PORT}`);
-    startCronJobs();
+// Local development: start server with listen
+const isVercel = process.env.VERCEL === '1';
+if (!isVercel) {
+  import('./cron.js').then(({ startCronJobs }) => {
+    app.listen(PORT, () => {
+      console.log(`Servidor rodando em http://localhost:${PORT}`);
+      startCronJobs();
+    });
   });
 }
-
-start().catch(err => {
-  console.error('Falha ao iniciar servidor:', err);
-  process.exit(1);
-});
