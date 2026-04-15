@@ -37,6 +37,17 @@ app.use(cors());
 app.use(express.json());
 app.use('/uploads', express.static(join(__dirname, 'uploads')));
 
+// Health check / diagnostics (before db init)
+app.get('/api/health', async (req, res) => {
+  try {
+    const { initDatabase: initDb } = await import('./database.js');
+    await initDb();
+    res.json({ status: 'ok', db: 'connected', env: !!process.env.DATABASE_URL });
+  } catch (err) {
+    res.status(500).json({ status: 'error', message: err.message, env: !!process.env.DATABASE_URL });
+  }
+});
+
 // Lazy database initialization (runs once)
 let dbInitialized = false;
 app.use(async (req, res, next) => {
@@ -46,7 +57,7 @@ app.use(async (req, res, next) => {
       dbInitialized = true;
     } catch (err) {
       console.error('Falha ao inicializar banco:', err);
-      return res.status(500).json({ error: 'Erro ao conectar ao banco de dados' });
+      return res.status(500).json({ error: 'Erro ao conectar ao banco de dados', detail: err.message });
     }
   }
   next();
